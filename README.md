@@ -9,60 +9,16 @@ This guide will walk you through setting up and running the competition environm
 2. **Requirements**:
    - If your solution requires additional Python libraries, list them in `requirements.txt`.
 
-### Example Participant Implementation
-Here is an example implementation of the class:
-
-```python
-# MyDiagnosisSystem.py
-import numpy as np
-import random
-from DiagnosisSystemClass import DiagnosisSystemClass
-
-class MyDiagnosisSystem(DiagnosisSystemClass):
-
-    def __init__(self):
-        super().__init__()
-        # your initialization code here
-        # you can load models and precomputed parameters here
-
-    def diagnose_sample(self, sample):
-        sample = sample[self.signal_names]
-        
-        # process faults
-        fault_detection = random.randint(0, 1)
-        
-        if fault_detection == 1:
-            fault_isolation = np.random.uniform(0, 1, self.n_faults)
-            fault_isolation = fault_isolation / np.sum(fault_isolation)
-        else:
-            fault_isolation = np.zeros((1, self.n_faults))
-
-        # cyber attacks
-        cyber_detection = random.randint(0, 1)
-        
-        if cyber_detection == 1:
-            cyber_isolation = np.random.uniform(0, 1, self.n_loops)
-            cyber_isolation = cyber_isolation / np.sum(cyber_isolation)
-        else:
-            cyber_isolation = np.zeros((1, self.n_loops))
-
-        return fault_detection, fault_isolation, cyber_detection, cyber_isolation
-```
-
-#### Example Participant Implementation with Neural Network
-Example using neural network for residual generator was provided in ExampleDiagnosisSystemNN.py.
-To run the neural network example, add tensorflow, scikit-learn, and joblib to the requirements.txt file.
-
 ### Input and Output
 - **Input File**: specify file name in the command line
 ```
-python run_diagnoser.py data/training_data/example_data.csv
+python RunDiagnoser.py data/training_data/wltp_NF.csv
 ```
 
-- **Output File**: After running the command, `results/output_example_data.csv` will be created
+- **Output File**: After running the command, `results/wltp_NF.csv` will be created
 
-### Modifying `run_diagnoser.py`
-Participants need to modify `run_diagnoser.py` to use their own diagnosis system. Change the following lines:
+### Modifying `RunDiagnoser.py`
+Participants need to modify `RunDiagnoser.py` to use their own diagnosis system. Change the following lines:
 
 ```python
 from ExampleDiagnosisSystem import ExampleDiagnosisSystem # Change this line to use your own diagnosis system
@@ -77,21 +33,12 @@ The script has a timeout of 0.1 seconds for each sample. If the diagnosis takes 
 
 The solutions will be evaluated on WSL2 Ubuntu 22.04, Docker version 24.0.7, Intel(R) Core(TM) i7-10750H CPU @ 2.60GHz.
 
-It means that your solution can be up to approximately 20 times slower than the example implementation in ExampleDiagnosisSystemNN.py.
-
-### Expected Output from `diagnose_sample`
-The `diagnose_sample` method should return a tuple with the following elements:
-- `fault_detection`: 0 or 1
-- `fault_isolation`: a numpy array with the probabilities of each fault of length `n_faults`. Array entries should sum to one.
-- `cyber_detection`: 0 or 1
-- `cyber_isolation`: a numpy array with the probabilities of each loop of length `n_loops`. Array entries should be between 0 and 1.
-
 ### Initialization in `__init__`
 Participants can use the `__init__` method to initialize their diagnosis system. This can include loading models, precomputed parameters, or any other setup required for their diagnosis system.
 
 Please note that all solutions will be evaluated inside a docker image created with the provided docker file. Please ensure that all precomputed files are compatible with this environment. It is strongly recommended that you run your final model training on the docker image created using the provided dockerfile.
 
-Example how to save and load models and scalers is provided in ExampleDiagnosisSystemNN.py. Please make sure that your solution includes trained models (where applicable) in the data/resources directory and the source code required to train the models.
+Example how to save and load models and scalers is provided in ExampleDiagnosisSystem.py. Please make sure that your solution includes trained models (where applicable) in the data/resources directory and the source code required to train the models.
 
 
 ## Prerequisites
@@ -138,16 +85,16 @@ Example how to save and load models and scalers is provided in ExampleDiagnosisS
 ## Repository Setup
 1. **Clone the Repository**:
    ```bash
-   git clone git@github.com:asztyber/DXC25_SLIDe.git
-   cd DXC25_SLIDe
+   git clone git@gitlab.com:daner29/dxc25liu-ice.git
+   cd dxc25liu-ice
    ```
 
 2. **Files Overview**:
    - `Dockerfile`: Defines the Docker image for the competition.
    - `DiagnosisSystemClass.py`: The base class interface for participants.
    - `ExampleDiagnosisSystem.py`: Example implementation of the DiagnosisSystemClass.py.
-   - `ExampleDiagnosisSystemNN.py`: Example implementation of the DiagnosisSystemClass.py using neural network for residual generator.
-   - `run_diagnoser.py`: The script used to run participant submissions.
+   - `ExampleDiagnosisSystem.py`: Example implementation of the DiagnosisSystemClass.py using random forests as a fault classifier.
+   - `RunDiagnoser.py`: The script used to run participant submissions.
    - `requirements.txt`: Contains required Python packages.
 
 ## Running the Environment
@@ -166,13 +113,13 @@ To run the evaluation, mount the current directory and specify input file. The o
 
 #### Ubuntu
 ```bash
-docker run -v "$(pwd):/app" --network none competition_env run_diagnoser.py data/training_data/example_data.csv 
+docker run -v "$(pwd):/app" --network none competition_env RunDiagnoser.py data/training_data/wltp_NF.csv 
 ```
 
 #### Windows (PowerShell)
 
 ```powershell
-docker run -v "${PWD}:/app" --network none competition_env run_diagnoser.py data/training_data/example_data.csv
+docker run -v "${PWD}:/app" --network none competition_env RunDiagnoser.py data/training_data/wltp_NF.csv
 ```
 
 
@@ -180,5 +127,5 @@ By using --network none, the container will be completely isolated from the netw
 
 ### Additional Information
 
-Please note that the example_data.csv is only for testing and explanatory purposes. The actual data is **not provided** in this repository because of GitHub file size limits. Please use the training data provided on the competition website to train your models.
+Please note that the provided training data is only for testing and explanatory purposes. The complete training data is **not provided** in this repository because of GitHub file size limits. Please use the training data provided on the competition website to train your models.
 

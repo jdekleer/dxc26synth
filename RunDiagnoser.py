@@ -1,8 +1,12 @@
 import pandas as pd
 
 import time
+import sys
+import os
 
 from ExampleDiagnosisSystem import ExampleDiagnosisSystem
+
+TIMEOUT = 0.1
 
 ## Create diagnosis system class
 
@@ -15,10 +19,17 @@ EDS = ExampleDiagnosisSystem() # change to your class here
 EDS.Initialize()
 
 # Load test data
-test_data = pd.read_csv('../data/trainingdata/wltp_f_waf_110.csv')
+if len(sys.argv) != 2:
+    print("Usage: python run_diagnoser.py <input_file>")
+    sys.exit(1)
+
+input_file = sys.argv[1]
+test_data = pd.read_csv(input_file, sep=';')
 
 # Log diagnosis output
-filehandler = open('../results/output.csv', 'w')
+output_file = os.path.join('results', 'output_' + os.path.basename(input_file))
+
+filehandler = open(output_file, 'w')
 filehandler.write('sample_time,computation_time,detection,fpic_rank,fpim_rank,fwaf_rank,fiml_rank,fx_rank\n');
 
 for time_idx in range(len(test_data)):
@@ -31,6 +42,11 @@ for time_idx in range(len(test_data)):
     
     # Log diagnosis output
     filehandler.write('%f,%f,%d,%f,%f,%f,%f,%f \n' % (test_data['time'][time_idx], elapsed, detection[0], isolation[0,0], isolation[0,1], isolation[0,2], isolation[0,3], isolation[0,4]))
+
+    # Check if solution is too slow
+    if elapsed > TIMEOUT and time_idx > 5:
+        print(f"Timeout at time index {time_idx} ({test_data['time'][time_idx]})")
+        break
 
     # Print progress
     if time_idx % 1000 == 0:
