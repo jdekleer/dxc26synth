@@ -1,93 +1,184 @@
-# DXC25LiU-ICE
+# Competition Setup Guide
 
+This guide will walk you through setting up and running the competition environment using Docker on both Ubuntu and Windows. The repository contains a Dockerfile, a Python class interface, and an evaluation script to ensure consistent evaluation for all participants.
 
+## Participants' Instructions
+1. **Implement the Class**:
+   - Use `DiagnosisSystemClass.py` as a reference.
+   - Implement your solution in a new Python file (e.g., `MyDiagnosisSystem.py`).
+2. **Requirements**:
+   - If your solution requires additional Python libraries, list them in `requirements.txt`.
 
-## Getting started
+### Example Participant Implementation
+Here is an example implementation of the class:
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+```python
+# MyDiagnosisSystem.py
+import numpy as np
+import random
+from DiagnosisSystemClass import DiagnosisSystemClass
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+class MyDiagnosisSystem(DiagnosisSystemClass):
 
-## Add your files
+    def __init__(self):
+        super().__init__()
+        # your initialization code here
+        # you can load models and precomputed parameters here
 
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/ee/gitlab-basics/add-file.html#add-a-file-using-the-command-line) or push an existing Git repository with the following command:
+    def diagnose_sample(self, sample):
+        sample = sample[self.signal_names]
+        
+        # process faults
+        fault_detection = random.randint(0, 1)
+        
+        if fault_detection == 1:
+            fault_isolation = np.random.uniform(0, 1, self.n_faults)
+            fault_isolation = fault_isolation / np.sum(fault_isolation)
+        else:
+            fault_isolation = np.zeros((1, self.n_faults))
 
+        # cyber attacks
+        cyber_detection = random.randint(0, 1)
+        
+        if cyber_detection == 1:
+            cyber_isolation = np.random.uniform(0, 1, self.n_loops)
+            cyber_isolation = cyber_isolation / np.sum(cyber_isolation)
+        else:
+            cyber_isolation = np.zeros((1, self.n_loops))
+
+        return fault_detection, fault_isolation, cyber_detection, cyber_isolation
 ```
-cd existing_repo
-git remote add origin https://gitlab.com/daner29/dxc25liu-ice.git
-git branch -M main
-git push -uf origin main
+
+#### Example Participant Implementation with Neural Network
+Example using neural network for residual generator was provided in ExampleDiagnosisSystemNN.py.
+To run the neural network example, add tensorflow, scikit-learn, and joblib to the requirements.txt file.
+
+### Input and Output
+- **Input File**: specify file name in the command line
+```
+python run_diagnoser.py data/training_data/example_data.csv
 ```
 
-## Integrate with your tools
+- **Output File**: After running the command, `results/output_example_data.csv` will be created
 
-- [ ] [Set up project integrations](https://gitlab.com/daner29/dxc25liu-ice/-/settings/integrations)
+### Modifying `run_diagnoser.py`
+Participants need to modify `run_diagnoser.py` to use their own diagnosis system. Change the following lines:
 
-## Collaborate with your team
+```python
+from ExampleDiagnosisSystem import ExampleDiagnosisSystem # Change this line to use your own diagnosis system
 
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Set auto-merge](https://docs.gitlab.com/ee/user/project/merge_requests/merge_when_pipeline_succeeds.html)
+# Create diagnosis system
+ds = ExampleDiagnosisSystem() # Change this line to use your own diagnosis system
+```
+Do not change anything else in run_diagnoser.py!
 
-## Test and Deploy
+### Timeout
+The script has a timeout of 0.1 seconds for each sample. If the diagnosis takes longer than this, the script will print a timeout message and stop processing further samples.
 
-Use the built-in continuous integration in GitLab.
+The solutions will be evaluated on WSL2 Ubuntu 22.04, Docker version 24.0.7, Intel(R) Core(TM) i7-10750H CPU @ 2.60GHz.
 
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/index.html)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
+It means that your solution can be up to approximately 20 times slower than the example implementation in ExampleDiagnosisSystemNN.py.
 
-***
+### Expected Output from `diagnose_sample`
+The `diagnose_sample` method should return a tuple with the following elements:
+- `fault_detection`: 0 or 1
+- `fault_isolation`: a numpy array with the probabilities of each fault of length `n_faults`. Array entries should sum to one.
+- `cyber_detection`: 0 or 1
+- `cyber_isolation`: a numpy array with the probabilities of each loop of length `n_loops`. Array entries should be between 0 and 1.
 
-# Editing this README
+### Initialization in `__init__`
+Participants can use the `__init__` method to initialize their diagnosis system. This can include loading models, precomputed parameters, or any other setup required for their diagnosis system.
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+Please note that all solutions will be evaluated inside a docker image created with the provided docker file. Please ensure that all precomputed files are compatible with this environment. It is strongly recommended that you run your final model training on the docker image created using the provided dockerfile.
 
-## Suggestions for a good README
+Example how to save and load models and scalers is provided in ExampleDiagnosisSystemNN.py. Please make sure that your solution includes trained models (where applicable) in the data/resources directory and the source code required to train the models.
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
 
-## Name
-Choose a self-explaining name for your project.
+## Prerequisites
+- [Docker](https://docs.docker.com/get-docker/) installed on your machine (instructions provided below).
+- Git installed to clone the repository.
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+### Docker Installation
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+#### Ubuntu
+1. **Update your system**:
+   ```bash
+   sudo apt update
+   ```
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+2. **Install Docker**:
+   ```bash
+   sudo apt install docker.io
+   ```
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+3. **Start and Enable Docker**:
+   ```bash
+   sudo systemctl start docker
+   sudo systemctl enable docker
+   ```
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+4. **Add your user to the Docker group** (optional, for running Docker without `sudo`):
+   ```bash
+   sudo usermod -aG docker $USER
+   ```
+   After this, log out and log back in for changes to take effect.
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+#### Windows
+1. **Download Docker Desktop** from [Docker's official website](https://www.docker.com/products/docker-desktop).
+2. **Install Docker Desktop** and follow the on-screen instructions.
+3. **Enable WSL2 Integration** (recommended):
+   - Open Docker Desktop settings.
+   - Navigate to "Resources" > "WSL Integration" and enable integration for your desired WSL2 distributions.
+4. **Verify Installation**:
+   Open PowerShell or Command Prompt and run:
+   ```powershell
+   docker --version
+   ```
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+## Repository Setup
+1. **Clone the Repository**:
+   ```bash
+   git clone git@github.com:asztyber/DXC25_SLIDe.git
+   cd DXC25_SLIDe
+   ```
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
+2. **Files Overview**:
+   - `Dockerfile`: Defines the Docker image for the competition.
+   - `DiagnosisSystemClass.py`: The base class interface for participants.
+   - `ExampleDiagnosisSystem.py`: Example implementation of the DiagnosisSystemClass.py.
+   - `ExampleDiagnosisSystemNN.py`: Example implementation of the DiagnosisSystemClass.py using neural network for residual generator.
+   - `run_diagnoser.py`: The script used to run participant submissions.
+   - `requirements.txt`: Contains required Python packages.
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+## Running the Environment
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
+### Build the Docker Image
 
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+In the directory where the Dockerfile is located, build the Docker image:
 
-## License
-For open source projects, say how it is licensed.
+```bash
+docker build -t competition_env .
+```
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+### Running the Evaluation
+
+To run the evaluation, mount the current directory and specify input file. The output file is saved in the results directory with the output_ prefix.
+
+#### Ubuntu
+```bash
+docker run -v "$(pwd):/app" --network none competition_env run_diagnoser.py data/training_data/example_data.csv 
+```
+
+#### Windows (PowerShell)
+
+```powershell
+docker run -v "${PWD}:/app" --network none competition_env run_diagnoser.py data/training_data/example_data.csv
+```
+
+
+By using --network none, the container will be completely isolated from the network, ensuring it cannot connect to the internet or any external network.
+
+### Additional Information
+
+Please note that the example_data.csv is only for testing and explanatory purposes. The actual data is **not provided** in this repository because of GitHub file size limits. Please use the training data provided on the competition website to train your models.
+
