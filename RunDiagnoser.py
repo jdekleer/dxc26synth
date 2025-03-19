@@ -24,7 +24,7 @@ if len(sys.argv) != 2:
     sys.exit(1)
 
 input_file = sys.argv[1]
-test_data = pd.read_csv(input_file, sep=';')
+test_data = pd.read_csv(input_file, sep=',')
 
 # Log diagnosis output
 output_file = os.path.join('results', 'output_' + os.path.basename(input_file))
