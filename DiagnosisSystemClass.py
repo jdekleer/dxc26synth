@@ -197,8 +197,10 @@ class DiagnosisSystemClass:
     def _checkConsistent(self, signals, sample):
         """Check if simulated signals are consistent with sample outputs."""
         for out in self.outputs:
-            if out in sample:
-                if signals.get(out) != sample[out]:
+            if out in sample and out in signals:
+                # Only compare if we have both simulated and actual values
+                simulated = signals[out]
+                if simulated is not None and simulated != sample[out]:
                     return False
         return True
     
