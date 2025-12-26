@@ -5,15 +5,12 @@ import signal
 import re
 
 from DiagnosisSystemClass import DiagnosisSystemClass
-# Add more diagnosers here:
-# from MyBetterDiagnoser import MyBetterDiagnoser
-# from NeuralDiagnoser import NeuralDiagnoser
+from RandomDiagnoser import RandomDiagnoser
 
 # List of diagnoser classes to test
 DIAGNOSERS = [
+    ("Random", RandomDiagnoser),
     ("SimpleSingleFault", DiagnosisSystemClass),
-    # ("BetterDiagnoser", MyBetterDiagnoser),
-    # ("NeuralDiagnoser", NeuralDiagnoser),
 ]
 
 # Timeout for processing each .scn file (in seconds)
@@ -56,12 +53,17 @@ def run_benchmark(diagnoser_class, modelsDir, dataDir):
     for modelFile in os.listdir(modelsDir):
         if modelFile.endswith('.xml'):
             EDS.newModelFile(os.path.join(modelsDir, modelFile))
-            print(f"\n  {modelFile} ({len(EDS.gates)} gates): ", end="", flush=True)
+            num_gates = len(EDS.gates)
+            print(f"\n  {modelFile} ({num_gates} gates): ", end="", flush=True)
             modelName = modelFile.replace('.xml', '')
             modelDataDir = os.path.join(dataDir, modelName)
             
+            # Metrics storage
             detection_times = []
-            isolation_scores = []
+            isolation_scores = []       # 1 if fault in isolation set, 0 otherwise
+            isolation_sizes = []        # Size of isolation set
+            false_positives = 0         # Detection before fault injection
+            true_negatives = 0          # No detection before fault injection
             num_timeouts = 0
             
             if os.path.isdir(modelDataDir):
@@ -107,6 +109,14 @@ def run_benchmark(diagnoser_class, modelsDir, dataDir):
                                         detection, isolation = EDS.Input(sensors, timeout=SOFT_TIMEOUT, start_time=scn_start_time)
                                         last_isolation = isolation
                                         
+                                        # Track false positives (detection before fault)
+                                        if not fault_injected:
+                                            if detection:
+                                                false_positives += 1
+                                            else:
+                                                true_negatives += 1
+                                        
+                                        # Track detection after fault injection
                                         if fault_injected:
                                             if detection and time_to_detection is None:
                                                 time_to_detection = samples_after_fault
@@ -121,9 +131,11 @@ def run_benchmark(diagnoser_class, modelsDir, dataDir):
                     if timed_out:
                         detection_times.append(float('inf'))
                         isolation_scores.append(0)
+                        isolation_sizes.append(0)
                         num_timeouts += 1
                     elif time_to_detection is not None:
                         detection_times.append(time_to_detection)
+                        isolation_sizes.append(len(last_isolation))
                         
                         if len(injected_faults) == 1:
                             injected_fault = list(injected_faults)[0]
@@ -136,6 +148,7 @@ def run_benchmark(diagnoser_class, modelsDir, dataDir):
                     elif fault_injected:
                         detection_times.append(float('inf'))
                         isolation_scores.append(0)
+                        isolation_sizes.append(0)
                     
                     print(".", end="", flush=True)
             
@@ -148,70 +161,123 @@ def run_benchmark(diagnoser_class, modelsDir, dataDir):
                 num_detected = len(finite_times)
                 num_total = len(detection_times)
                 
+                # Detection accuracy (true positive rate)
+                detection_accuracy = num_detected / num_total if num_total > 0 else 0
+                
+                # False positive rate
+                total_pre_fault = false_positives + true_negatives
+                fp_rate = false_positives / total_pre_fault if total_pre_fault > 0 else 0
+                
+                # Isolation metrics
                 if isolation_scores:
                     avg_isolation = sum(isolation_scores) / len(isolation_scores)
                 else:
                     avg_isolation = 0
+                
+                if isolation_sizes:
+                    avg_isolation_size = sum(isolation_sizes) / len(isolation_sizes)
+                else:
+                    avg_isolation_size = 0
                 
                 model_results[modelName] = {
                     'avg_time_to_detection': avg_time,
                     'num_detected': num_detected,
                     'num_total': num_total,
                     'num_timeouts': num_timeouts,
-                    'avg_isolation_score': avg_isolation
+                    'detection_accuracy': detection_accuracy,
+                    'false_positive_rate': fp_rate,
+                    'avg_isolation_score': avg_isolation,
+                    'avg_isolation_size': avg_isolation_size,
+                    'num_gates': num_gates
                 }
     
     return model_results
 
 def print_results(diagnoser_name, model_results):
     """Print results for a diagnoser."""
-    print("\n" + "="*80)
+    print("\n" + "="*120)
     print(f"Results for: {diagnoser_name}")
-    print("="*80)
-    print(f"{'Model':<15} {'Avg TTD':<10} {'Detected':<10} {'Total':<8} {'Timeouts':<10} {'Avg Isol':<10}")
-    print("-"*80)
+    print("="*120)
+    print(f"{'Model':<12} {'Gates':<8} {'Det Acc':<10} {'FP Rate':<10} {'Avg TTD':<10} {'Isol Score':<12} {'Isol Size':<10} {'Timeouts':<10}")
+    print("-"*120)
     
     for model in sorted(model_results.keys()):
-        result = model_results[model]
-        avg = result['avg_time_to_detection']
-        avg_str = f"{avg:.2f}" if avg != float('inf') else "N/A"
-        isol_str = f"{result['avg_isolation_score']:.2f}"
-        print(f"{model:<15} {avg_str:<10} {result['num_detected']:<10} {result['num_total']:<8} {result['num_timeouts']:<10} {isol_str:<10}")
+        r = model_results[model]
+        avg_ttd = f"{r['avg_time_to_detection']:.2f}" if r['avg_time_to_detection'] != float('inf') else "N/A"
+        print(f"{model:<12} {r['num_gates']:<8} {r['detection_accuracy']:.2f}      {r['false_positive_rate']:.2f}      {avg_ttd:<10} {r['avg_isolation_score']:.2f}        {r['avg_isolation_size']:.1f}       {r['num_timeouts']:<10}")
     
-    print("="*80)
+    print("="*120)
 
 def print_comparison(all_results):
     """Print comparison table across all diagnosers."""
     if len(all_results) <= 1:
         return
     
-    print("\n" + "="*100)
-    print("COMPARISON ACROSS DIAGNOSERS")
-    print("="*100)
+    diagnoser_names = list(all_results.keys())
     
     # Get all models
     all_models = set()
     for diagnoser_name, results in all_results.items():
         all_models.update(results.keys())
     
-    # Header
+    # Comparison: Isolation Score
+    print("\n" + "="*100)
+    print("COMPARISON: Isolation Score (higher is better)")
+    print("="*100)
     header = f"{'Model':<15}"
-    for diagnoser_name in all_results.keys():
-        header += f" {diagnoser_name[:12]:<14}"
+    for name in diagnoser_names:
+        header += f" {name[:15]:<17}"
     print(header)
     print("-"*100)
-    
-    # Rows (showing avg isolation score)
     for model in sorted(all_models):
         row = f"{model:<15}"
-        for diagnoser_name, results in all_results.items():
-            if model in results:
-                isol = results[model]['avg_isolation_score']
-                row += f" {isol:.2f}         "
+        for name in diagnoser_names:
+            if model in all_results[name]:
+                val = all_results[name][model]['avg_isolation_score']
+                row += f" {val:.2f}             "
             else:
-                row += " N/A          "
+                row += " N/A              "
         print(row)
+    print("="*100)
     
+    # Comparison: Isolation Size
+    print("\n" + "="*100)
+    print("COMPARISON: Isolation Size (smaller is better - more precise)")
+    print("="*100)
+    header = f"{'Model':<15}"
+    for name in diagnoser_names:
+        header += f" {name[:15]:<17}"
+    print(header)
+    print("-"*100)
+    for model in sorted(all_models):
+        row = f"{model:<15}"
+        for name in diagnoser_names:
+            if model in all_results[name]:
+                val = all_results[name][model]['avg_isolation_size']
+                row += f" {val:.1f}             "
+            else:
+                row += " N/A              "
+        print(row)
+    print("="*100)
+    
+    # Comparison: False Positive Rate
+    print("\n" + "="*100)
+    print("COMPARISON: False Positive Rate (lower is better)")
+    print("="*100)
+    header = f"{'Model':<15}"
+    for name in diagnoser_names:
+        header += f" {name[:15]:<17}"
+    print(header)
+    print("-"*100)
+    for model in sorted(all_models):
+        row = f"{model:<15}"
+        for name in diagnoser_names:
+            if model in all_results[name]:
+                val = all_results[name][model]['false_positive_rate']
+                row += f" {val:.2f}             "
+            else:
+                row += " N/A              "
+        print(row)
     print("="*100)
 
 # Main execution
