@@ -1,6 +1,6 @@
-# Competition Setup Guide [in process]
+# Competition Setup Guide
 
-This guide will walk you through setting up and running the competition environment using Docker on both Ubuntu and Windows. The repository contains a Dockerfile, a Python class interface, and an evaluation script to ensure consistent evaluation for all participants.
+This is a preliminary guide to running the Synthetic track competition environment.  It will evolve as we proceed.
 
 ## Participants' Instructions
 1. **Implement the Class**:
