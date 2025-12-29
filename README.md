@@ -2,6 +2,20 @@
 
 This is a preliminary guide to running the Synthetic track competition environment.  It will evolve as we proceed.
 
+You can get this repository from https://github.com/jdekleer/dxc26synth.git 
+
+The simplest way to run the diagnoser is to go to the directory you installed dxc26synth.git and do python3 RunDiagnoser.py.
+
+This repository comes with two not-so-smart diagnosers built-in.  You should see output:
+
+Paste it here.  This takes sometime because it runs the full benchmark.
+
+To define your own diagnoser.  Look at RunDiagnoser.py, in the beginning of the file you will see a variable DIAGNOSERS=... Just look at one of the diagnoser definitions and you can see how to implement your own.  And add it to DIAGNOSERS as shown.
+
+
+Below this is old.
+
+
 ## Participants' Instructions
 1. **Implement the Class**:
    - Use `DiagnosisSystemClass.py` as a reference.
