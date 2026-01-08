@@ -1,0 +1,6 @@
+sensors @0 { i1 = true, i2 = false, i3 = false, i4 = false, i5 = true, i6 = false, i7 = false, i8 = true, i9 = true, o1 = true, o2 = false, o3 = true, o4 = true, o5 = true };
+faultInjection @5000 isInjection = true, fault = { gate53 = faulty }, parameters = {};
+faultInjection @5000 isInjection = true, fault = { gate62 = faulty }, parameters = {};
+faultInjection @5000 isInjection = true, fault = { gate68 = faulty }, parameters = {};
+sensors @6000 { i1 = true, i2 = false, i3 = false, i4 = false, i5 = true, i6 = false, i7 = false, i8 = true, i9 = true, o1 = false, o2 = false, o3 = false, o4 = true, o5 = false };
+ambiguityGroup @7000 size = 20, minCardinality = 3, diagnoses = { { gate49, gate53, gate59 }, { gate49, gate53, gate60 }, { gate49, gate53, gate61 }, { gate49, gate53, gate62 }, { gate49, gate53, gate63 }, { gate53, gate59, gate68 }, { gate53, gate59, gate69 }, { gate53, gate59, gate70 }, { gate53, gate60, gate68 }, { gate53, gate60, gate69 }, { gate53, gate60, gate70 }, { gate53, gate61, gate68 }, { gate53, gate61, gate69 }, { gate53, gate61, gate70 }, { gate53, gate62, gate68 }, { gate53, gate62, gate69 }, { gate53, gate62, gate70 }, { gate53, gate63, gate68 }, { gate53, gate63, gate69 }, { gate53, gate63, gate70 } };

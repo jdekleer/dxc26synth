@@ -1,0 +1,4 @@
+sensors @0 { i1 = true, i2 = false, i3 = false, i4 = false, i5 = true, i6 = false, i7 = false, i8 = true, i9 = true, o1 = true, o2 = false, o3 = true, o4 = true, o5 = true };
+faultInjection @5000 isInjection = true, fault = { gate70 = faulty }, parameters = {};
+sensors @6000 { i1 = true, i2 = false, i3 = false, i4 = false, i5 = true, i6 = false, i7 = false, i8 = true, i9 = true, o1 = true, o2 = false, o3 = true, o4 = true, o5 = false };
+ambiguityGroup @7000 size = 4, minCardinality = 1, diagnoses = { { gate49 }, { gate68 }, { gate69 }, { gate70 } };

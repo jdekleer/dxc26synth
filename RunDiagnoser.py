@@ -5,11 +5,13 @@ import signal
 import re
 
 from DiagnosisSystemClass import DiagnosisSystemClass
-from RandomDiagnoser import RandomDiagnoser
+from RandomDiagnoser import RandomDiagnoser, NullDiagnoser, WorstDiagnoser
 
 # List of diagnoser classes to test
 DIAGNOSERS = [
+    ("Null", NullDiagnoser),
     ("Random", RandomDiagnoser),
+    ("Worst", WorstDiagnoser),
     ("SimpleSingleFault", DiagnosisSystemClass),
 ]
 
@@ -36,6 +38,199 @@ def parse_fault_injection(line):
                 faults.add(gate_name)
         return faults
     return set()
+
+
+def parse_ambiguity_group(line):
+    """Parse ambiguityGroup line and return set of frozensets (the AG).
+    
+    Format: ambiguityGroup @7000 size = 2, minCardinality = 1, diagnoses = { { gate107 }, { gate97 } };
+    Or multi-fault: diagnoses = { { gate101, gate106 }, { gate103, gate106 }, ... };
+    
+    Returns None if timeout or invalid format.
+    """
+    if 'timeout' in line.lower():
+        return None
+    
+    # Find the diagnoses part
+    match = re.search(r'diagnoses\s*=\s*\{(.+)\}\s*;', line)
+    if not match:
+        return None
+    
+    diagnoses_str = match.group(1).strip()
+    
+    # Parse individual diagnoses: { gate1, gate2 }, { gate3 }, ...
+    ag = set()
+    # Find all { ... } blocks
+    diagnosis_matches = re.findall(r'\{([^}]*)\}', diagnoses_str)
+    
+    for diag_str in diagnosis_matches:
+        gates = set()
+        for gate in diag_str.split(','):
+            gate = gate.strip()
+            if gate:
+                gates.add(gate)
+        if gates:
+            ag.add(frozenset(gates))
+    
+    return ag if ag else None
+
+
+def parse_scn_file_for_ag(filepath):
+    """Read a .scn file and extract the true ambiguity group.
+    
+    Returns:
+        tuple: (sensor_readings, true_ag, num_components_hint)
+        sensor_readings: list of dicts with sensor values
+        true_ag: set of frozensets representing the true AG, or None if timeout
+    """
+    sensor_readings = []
+    true_ag = None
+    
+    with open(filepath, 'r') as f:
+        for line in f:
+            line = line.strip()
+            
+            if line.startswith('sensors'):
+                start = line.find('{')
+                end = line.find('}')
+                if start != -1 and end != -1:
+                    content = line[start+1:end].strip()
+                    sensors = {}
+                    for pair in content.split(','):
+                        pair = pair.strip()
+                        if '=' in pair:
+                            key, value = pair.split('=', 1)
+                            key = key.strip()
+                            value = value.strip()
+                            sensors[key] = (value == 'true')
+                    sensor_readings.append(sensors)
+            
+            elif line.startswith('ambiguityGroup'):
+                true_ag = parse_ambiguity_group(line)
+    
+    return sensor_readings, true_ag
+
+
+def run_ag_benchmark(diagnoser_class, modelsDir, dataDir, model_filter=None):
+    """Run benchmark using ambiguity groups and normalized m_utl metric.
+    
+    Args:
+        diagnoser_class: The diagnoser class to test
+        modelsDir: Directory containing model XML files
+        dataDir: Directory containing .scn scenario files (DXC26Synth1 format)
+        model_filter: Optional model name to run only that model (e.g., '74L85')
+    
+    Returns:
+        dict: Results per model
+    """
+    # Set up signal handler
+    signal.signal(signal.SIGALRM, timeout_handler)
+    
+    # Create diagnosis system
+    EDS = diagnoser_class()
+    EDS.Initialize()
+    
+    # Results storage
+    model_results = {}
+    
+    for modelFile in os.listdir(modelsDir):
+        if modelFile.endswith('.xml'):
+            modelName = modelFile.replace('.xml', '')
+            
+            # Filter by model name if specified
+            if model_filter and modelName != model_filter:
+                continue
+            
+            EDS.newModelFile(os.path.join(modelsDir, modelFile))
+            num_gates = len(EDS.gates)
+            print(f"\n  {modelFile} ({num_gates} gates): ", end="", flush=True)
+            modelDataDir = os.path.join(dataDir, modelName)
+            
+            # Metrics storage
+            mutl_scores = []
+            num_skipped = 0
+            num_processed = 0
+            
+            if os.path.isdir(modelDataDir):
+                dataFiles = sorted(os.listdir(modelDataDir))
+                for dataFile in dataFiles:
+                    if not dataFile.endswith('.scn'):
+                        continue
+                    
+                    dataFilePath = os.path.join(modelDataDir, dataFile)
+                    
+                    # Parse the .scn file
+                    sensor_readings, true_ag = parse_scn_file_for_ag(dataFilePath)
+                    
+                    # Skip if timeout or no AG
+                    if true_ag is None:
+                        num_skipped += 1
+                        print("s", end="", flush=True)
+                        continue
+                    
+                    try:
+                        signal.alarm(HARD_TIMEOUT)
+                        scn_start_time = time.time()
+                        
+                        # Feed all sensor readings to the DA
+                        da_isolation = set()
+                        for sensors in sensor_readings:
+                            detection, isolation = EDS.Input(sensors, timeout=SOFT_TIMEOUT, start_time=scn_start_time)
+                            if detection and isolation:
+                                da_isolation = isolation
+                        
+                        signal.alarm(0)
+                        
+                        # Convert DA's isolation to an AG (set of frozensets)
+                        # Check if DA already returned AG format (set of frozensets) or old format (set of strings)
+                        if da_isolation:
+                            first_elem = next(iter(da_isolation))
+                            if isinstance(first_elem, frozenset):
+                                # Already AG format
+                                da_ag = da_isolation
+                            else:
+                                # Old format: each gate is a singleton diagnosis
+                                da_ag = {frozenset({gate}) for gate in da_isolation}
+                        else:
+                            # If no isolation, use empty diagnosis (will score poorly)
+                            da_ag = {frozenset()}
+                        
+                        # Compute normalized m_utl
+                        score = mutl_normalized(da_ag, true_ag, num_gates)
+                        mutl_scores.append(score)
+                        num_processed += 1
+                        print(".", end="", flush=True)
+                        
+                    except TimeoutError:
+                        signal.alarm(0)
+                        num_skipped += 1
+                        print("t", end="", flush=True)
+            
+            if mutl_scores:
+                avg_mutl = sum(mutl_scores) / len(mutl_scores)
+                model_results[modelName] = {
+                    'avg_mutl_normalized': avg_mutl,
+                    'num_processed': num_processed,
+                    'num_skipped': num_skipped,
+                    'num_gates': num_gates
+                }
+    
+    return model_results
+
+
+def print_ag_results(diagnoser_name, model_results):
+    """Print results for AG benchmark."""
+    print("\n" + "="*80)
+    print(f"AG Benchmark Results for: {diagnoser_name}")
+    print("="*80)
+    print(f"{'Model':<12} {'Gates':<8} {'Avg m_utl':<12} {'Processed':<12} {'Skipped':<10}")
+    print("-"*80)
+    
+    for model in sorted(model_results.keys()):
+        r = model_results[model]
+        print(f"{model:<12} {r['num_gates']:<8} {r['avg_mutl_normalized']:.4f}       {r['num_processed']:<12} {r['num_skipped']:<10}")
+    
+    print("="*80)
 
 def run_benchmark(diagnoser_class, modelsDir, dataDir):
     """Run benchmark on a single diagnoser class and return results."""
@@ -280,21 +475,135 @@ def print_comparison(all_results):
         print(row)
     print("="*100)
 
+# =============================================================================
+# Normalized m_utl metric for Ambiguity Groups (from DXMetrics paper)
+# =============================================================================
+#
+# Base formula for single diagnoses:
+#   m_utl(ω,ω*) = 1 - n(N+1)/f(n+1) - n̄(N̄+1)/f(n̄+1)
+#
+# where:
+#   n = |ω - ω*|  (false positives: diagnosed but not faulty)
+#   N = |ω|       (size of diagnosis)
+#   n̄ = |ω* - ω|  (false negatives: missed faults)
+#   N̄ = f - N     (size of complement)
+#
+# For ambiguity groups, we average over all pairs and normalize by the best
+# achievable score (when D = T).
+
+def mutl_single(omega, omega_star, f):
+    """
+    Compute m_utl for a single diagnosis pair.
+    
+    Args:
+        omega: frozenset of diagnosed faulty components
+        omega_star: frozenset of true faulty components
+        f: total number of components in the system
+    
+    Returns:
+        m_utl score in [0, 1]
+    """
+    n = len(omega - omega_star)      # false positives
+    N = len(omega)                   # diagnosis size
+    nbar = len(omega_star - omega)   # false negatives
+    Nbar = f - N                     # complement size
+    
+    term1 = (n * (N + 1)) / (f * (n + 1))
+    term2 = (nbar * (Nbar + 1)) / (f * (nbar + 1))
+    
+    return 1 - term1 - term2
+
+
+def mutl_ag(D, T, f):
+    """
+    Compute average m_utl over all pairs from two ambiguity groups.
+    
+    Args:
+        D: set of frozensets - diagnosis AG from the DA
+        T: set of frozensets - true AG
+        f: total number of components in the system
+    
+    Returns:
+        average m_utl score
+    """
+    total = sum(mutl_single(omega, omega_star, f)
+                for omega in D for omega_star in T)
+    return total / (len(D) * len(T))
+
+
+def mutl_normalized(D, T, f):
+    """
+    Compute normalized m_utl for ambiguity groups.
+    
+    Normalizes by the best achievable score (when D = T), so that
+    a perfect match yields a score of 1.
+    
+    Args:
+        D: set of frozensets - diagnosis AG from the DA
+        T: set of frozensets - true AG  
+        f: total number of components in the system
+    
+    Returns:
+        normalized m_utl score in [0, 1], where 1 = perfect match
+    """
+    score = mutl_ag(D, T, f)
+    best = mutl_ag(T, T, f)
+    return score / best
+
+
+# Convenience alias for backward compatibility
+def mutl(w, wstar, f):
+    """
+    Compute m_utl for single diagnosis sets (backward compatible).
+    
+    Args:
+        w: set of diagnosed faulty components
+        wstar: set of true faulty components
+        f: total number of components
+    
+    Returns:
+        m_utl score
+    """
+    return mutl_single(frozenset(w), frozenset(wstar), f)
+
 # Main execution
 if __name__ == "__main__":
+    import argparse
+    
+    parser = argparse.ArgumentParser(description='Run diagnosis benchmarks')
+    parser.add_argument('--ag', action='store_true', help='Run AG benchmark with normalized m_utl')
+    parser.add_argument('--model', type=str, default=None, help='Filter to specific model (e.g., 74L85)')
+    parser.add_argument('--datadir', type=str, default=None, help='Override data directory')
+    args = parser.parse_args()
+    
     modelsDir = os.path.expanduser("~/git/dxc25synth/data/weak")
-    dataDir = os.path.expanduser("~/git/dxc25synth/data/dxc-09-syn-benchmark-1.1")
     
-    all_results = {}
-    
-    for diagnoser_name, diagnoser_class in DIAGNOSERS:
-        print(f"\n{'#'*80}")
-        print(f"# Running: {diagnoser_name}")
-        print(f"{'#'*80}")
+    if args.ag:
+        # AG benchmark with DXC26Synth1 format
+        dataDir = args.datadir or os.path.expanduser("~/git/GDE/DXC/DXC26Synth1")
         
-        results = run_benchmark(diagnoser_class, modelsDir, dataDir)
-        all_results[diagnoser_name] = results
-        print_results(diagnoser_name, results)
-    
-    # Print comparison if multiple diagnosers
-    print_comparison(all_results)
+        all_results = {}
+        for diagnoser_name, diagnoser_class in DIAGNOSERS:
+            print(f"\n{'#'*80}")
+            print(f"# Running AG Benchmark: {diagnoser_name}")
+            print(f"{'#'*80}")
+            
+            results = run_ag_benchmark(diagnoser_class, modelsDir, dataDir, model_filter=args.model)
+            all_results[diagnoser_name] = results
+            print_ag_results(diagnoser_name, results)
+    else:
+        # Original benchmark
+        dataDir = args.datadir or os.path.expanduser("~/git/dxc25synth/data/dxc-09-syn-benchmark-1.1")
+        
+        all_results = {}
+        for diagnoser_name, diagnoser_class in DIAGNOSERS:
+            print(f"\n{'#'*80}")
+            print(f"# Running: {diagnoser_name}")
+            print(f"{'#'*80}")
+            
+            results = run_benchmark(diagnoser_class, modelsDir, dataDir)
+            all_results[diagnoser_name] = results
+            print_results(diagnoser_name, results)
+        
+        # Print comparison if multiple diagnosers
+        print_comparison(all_results)

@@ -1,0 +1,12 @@
+sensors @0 { i1 = false, i2 = false, i3 = false, i4 = false, i5 = true, i6 = true, i7 = true, i8 = true, i9 = true, i10 = true, i11 = false, i12 = true, i13 = true, i14 = true, i15 = false, i16 = true, i17 = true, i18 = true, i19 = true, i20 = true, i21 = false, i22 = true, i23 = false, i24 = true, i25 = false, i26 = false, i27 = true, i28 = false, i29 = true, i30 = false, i31 = true, i32 = false, i33 = false, o1 = false, o2 = false, o3 = false, o4 = false, o5 = true, o6 = false, o7 = true, o8 = true, o9 = true, o10 = true, o11 = true, o12 = true, o13 = false, o14 = true, o15 = true, o16 = true, o17 = false, o18 = true, o19 = false, o20 = true, o21 = false, o22 = false, o23 = true, o24 = true, o25 = true };
+faultInjection @5000 isInjection = true, fault = { gate1014 = faulty }, parameters = {};
+faultInjection @5000 isInjection = true, fault = { gate1321 = faulty }, parameters = {};
+faultInjection @5000 isInjection = true, fault = { gate1538 = faulty }, parameters = {};
+faultInjection @5000 isInjection = true, fault = { gate1554 = faulty }, parameters = {};
+faultInjection @5000 isInjection = true, fault = { gate1585 = faulty }, parameters = {};
+faultInjection @5000 isInjection = true, fault = { gate31 = faulty }, parameters = {};
+faultInjection @5000 isInjection = true, fault = { gate41 = faulty }, parameters = {};
+faultInjection @5000 isInjection = true, fault = { gate44 = faulty }, parameters = {};
+faultInjection @5000 isInjection = true, fault = { gate48 = faulty }, parameters = {};
+sensors @6000 { i1 = false, i2 = false, i3 = false, i4 = false, i5 = true, i6 = true, i7 = true, i8 = true, i9 = true, i10 = true, i11 = false, i12 = true, i13 = true, i14 = true, i15 = false, i16 = true, i17 = true, i18 = true, i19 = true, i20 = true, i21 = false, i22 = true, i23 = false, i24 = true, i25 = false, i26 = false, i27 = true, i28 = false, i29 = true, i30 = false, i31 = true, i32 = false, i33 = false, o1 = false, o2 = false, o3 = false, o4 = false, o5 = false, o6 = true, o7 = false, o8 = false, o9 = true, o10 = false, o11 = true, o12 = true, o13 = true, o14 = true, o15 = true, o16 = false, o17 = false, o18 = true, o19 = false, o20 = true, o21 = false, o22 = true, o23 = false, o24 = true, o25 = true };
+ambiguityGroup @7000 size = -1, minCardinality = -1, diagnoses = { TIMEOUT };
