@@ -162,10 +162,11 @@ def run_ag_benchmark(diagnoser_class, modelsDir, dataDir, model_filter=None):
                     # Parse the .scn file
                     sensor_readings, true_ag = parse_scn_file_for_ag(dataFilePath)
                     
-                    # Skip if timeout or no AG
+                    # Skip scenarios where ground truth AG is unavailable (timed out during data generation)
+                    # We can't evaluate the DA if we don't know the correct answer
                     if true_ag is None:
                         num_skipped += 1
-                        print("s", end="", flush=True)
+                        print("s", end="", flush=True)  # s = skipped (no ground truth)
                         continue
                     
                     try:
@@ -203,15 +204,19 @@ def run_ag_benchmark(diagnoser_class, modelsDir, dataDir, model_filter=None):
                         
                     except TimeoutError:
                         signal.alarm(0)
-                        num_skipped += 1
-                        print("t", end="", flush=True)
+                        # Penalize DA timeouts with score = 0
+                        mutl_scores.append(0.0)
+                        num_processed += 1
+                        print("t", end="", flush=True)  # t = timeout in DA
             
             if mutl_scores:
                 avg_mutl = sum(mutl_scores) / len(mutl_scores)
+                num_da_timeouts = sum(1 for s in mutl_scores if s == 0.0)
                 model_results[modelName] = {
                     'avg_mutl_normalized': avg_mutl,
                     'num_processed': num_processed,
-                    'num_skipped': num_skipped,
+                    'num_skipped': num_skipped,      # no ground truth available
+                    'num_da_timeouts': num_da_timeouts,  # DA timed out (penalized with 0)
                     'num_gates': num_gates
                 }
     
@@ -220,17 +225,17 @@ def run_ag_benchmark(diagnoser_class, modelsDir, dataDir, model_filter=None):
 
 def print_ag_results(diagnoser_name, model_results):
     """Print results for AG benchmark."""
-    print("\n" + "="*80)
+    print("\n" + "="*90)
     print(f"AG Benchmark Results for: {diagnoser_name}")
-    print("="*80)
-    print(f"{'Model':<12} {'Gates':<8} {'Avg m_utl':<12} {'Processed':<12} {'Skipped':<10}")
-    print("-"*80)
+    print("="*90)
+    print(f"{'Model':<12} {'Gates':<8} {'Avg m_utl':<12} {'Evaluated':<12} {'Skipped':<10} {'DA T/O':<8}")
+    print("-"*90)
     
     for model in sorted(model_results.keys()):
         r = model_results[model]
-        print(f"{model:<12} {r['num_gates']:<8} {r['avg_mutl_normalized']:.4f}       {r['num_processed']:<12} {r['num_skipped']:<10}")
+        print(f"{model:<12} {r['num_gates']:<8} {r['avg_mutl_normalized']:.4f}       {r['num_processed']:<12} {r['num_skipped']:<10} {r['num_da_timeouts']:<8}")
     
-    print("="*80)
+    print("="*90)
 
 def run_benchmark(diagnoser_class, modelsDir, dataDir):
     """Run benchmark on a single diagnoser class and return results."""
@@ -580,7 +585,7 @@ if __name__ == "__main__":
     
     if args.ag:
         # AG benchmark with DXC26Synth1 format
-        dataDir = args.datadir or os.path.expanduser("~/git/GDE/DXC/DXC26Synth1")
+        dataDir = args.datadir or os.path.expanduser("~/git/dxc25synth/data/DXC26Synth1")
         
         all_results = {}
         for diagnoser_name, diagnoser_class in DIAGNOSERS:

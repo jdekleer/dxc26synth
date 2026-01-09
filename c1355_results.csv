@@ -1,0 +1,6 @@
+Diagnoser,Avg m_utl,Evaluated,Skipped,DA T/O
+SimpleSingleFault,0.8796,24,74,0
+Null,0.8242,24,74,0
+Random,0.8239,24,74,0
+Worst,0.0000,24,74,0
+
