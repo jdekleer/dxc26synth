@@ -6,49 +6,107 @@ You can get this repository from https://github.com/jdekleer/dxc26synth.git
 
 The simplest way to run the diagnoser is to go to the directory you installed dxc26synth.git and do python3 RunDiagnoser.py.
 
-This repository comes with two not-so-smart diagnosers built-in.  You should see output:
+For example, python3 RunDiagnoser.py --ag --model 74L85 will run the diagnostic algorithm on all scenarios in the 74L85 data set.  The --ag flag indicates the metric that will be used for the competition.
 
-Paste it here.  This takes sometime because it runs the full benchmark.
+This repository comes with several baseline diagnosers built-in.  You should see output like this:
+
+```
+################################################################################
+# Running AG Benchmark: Null
+################################################################################
+
+  74L85.xml (33 gates): ............................
+==========================================================================================
+AG Benchmark Results for: Null
+==========================================================================================
+Model        Gates    Avg m_utl    Evaluated    Skipped    DA T/O  
+------------------------------------------------------------------------------------------
+74L85        33       0.6573       28           0          0       
+==========================================================================================
+
+################################################################################
+# Running AG Benchmark: Random
+################################################################################
+
+  74L85.xml (33 gates): ............................
+==========================================================================================
+AG Benchmark Results for: Random
+==========================================================================================
+Model        Gates    Avg m_utl    Evaluated    Skipped    DA T/O  
+------------------------------------------------------------------------------------------
+74L85        33       0.6608       28           0          0       
+==========================================================================================
+
+################################################################################
+# Running AG Benchmark: Worst
+################################################################################
+
+  74L85.xml (33 gates): ............................
+==========================================================================================
+AG Benchmark Results for: Worst
+==========================================================================================
+Model        Gates    Avg m_utl    Evaluated    Skipped    DA T/O  
+------------------------------------------------------------------------------------------
+74L85        33       0.0040       28           0          0       
+==========================================================================================
+
+################################################################################
+# Running AG Benchmark: SimpleSingleFault
+################################################################################
+
+  74L85.xml (33 gates): ............................
+==========================================================================================
+AG Benchmark Results for: SimpleSingleFault
+==========================================================================================
+Model        Gates    Avg m_utl    Evaluated    Skipped    DA T/O  
+------------------------------------------------------------------------------------------
+74L85        33       0.7488       28           0          0       
+==========================================================================================
+```
+
+**Column meanings:**
+- **Avg m_utl**: Normalized utility metric (1.0 = perfect, 0.0 = worst)
+- **Evaluated**: Number of scenarios processed
+- **Skipped**: Scenarios skipped (ground truth unavailable)
+- **DA T/O**: DA timeouts (penalized with score 0)
+
+**How m_utl is calculated:**
+
+The metric compares the DA's ambiguity group (D) against the true ambiguity group (T):
+
+1. For each pair of diagnoses (ω ∈ D, ω* ∈ T), compute:
+   ```
+   m_utl(ω, ω*) = 1 - n(N+1)/f(n+1) - n̄(N̄+1)/f(n̄+1)
+   ```
+   where n = false positives, n̄ = false negatives, N = |ω|, N̄ = f - N, f = total components.
+
+2. Average over all pairs: `m_utl(D,T) = avg over all (ω, ω*) pairs`
+
+3. Normalize by the best achievable score: `m̃_utl = m_utl(D,T) / m_utl(T,T)`
+
+This ensures a perfect match (D = T) scores 1.0.
+
+
+
+**Built-in Diagnosers:**
+
+- **Null**: Always reports "nothing wrong" (no detection, empty isolation). Baseline that never makes false positive accusations but misses all faults.
+
+- **Random**: Always detects a fault and returns a random single gate. Baseline for comparison.
+
+- **Worst**: Returns a single diagnosis claiming ALL gates are faulty simultaneously. This maximizes false positives and scores near 0.
+
+- **SimpleSingleFault**: Simulates the circuit and finds all single-gate faults consistent with observations. A reasonable baseline that achieves ~75% on 74L85.
+
+The benchmark files come from past DXC competitions run in 2009, 2010 and 2011.  The model files used are exactly the same as well.  We are providing you examples of simple diagnosers which show you how to parse these model files.
+
+The final score of a DA is m_utl averaged over all designs, and the score for a design is the average of the m_utl's of all its scenarios.  The competition gives you 1 second for each scenario file.  Obtaining
+a perfect score in that time is very challenging.  We do not expect any algorithm will be able to get a perfect score.  For each benchmark scenario we have computed the minimum cardinality ambiguity group for each scenario.  We provide the DXC scenario files so you can see the correct ambiguity group for each scenario.  The highest scores are obtained by a DA which can find the correct minimum cardinality and all the diagnoses of that group.
+
+For the final competition we will have a completely new set of scenario files which we will run on one of our machines.
+
 
 To define your own diagnoser.  Look at RunDiagnoser.py, in the beginning of the file you will see a variable DIAGNOSERS=... Just look at one of the diagnoser definitions and you can see how to implement your own.  And add it to DIAGNOSERS as shown.
-
-
-Below this is old.
-
-
-## Participants' Instructions
-1. **Implement the Class**:
-   - Use `DiagnosisSystemClass.py` as a reference.
-   - Implement your solution in a new Python file (e.g., `MyDiagnosisSystem.py`).
-2. **Requirements**:
-   - If your solution requires additional Python libraries, list them in `requirements.txt`.
-
-### Input and Output
-- **Input File**: specify file name in the command line
-```
-python RunDiagnoser.py data/training_data/wltp_NF.csv
-```
-
-- **Output File**: After running the command, `results/wltp_NF.csv` will be created
-
-### Modifying `RunDiagnoser.py`
-Participants need to modify `RunDiagnoser.py` to use their own diagnosis system. Change the following lines:
-
-```python
-from ExampleDiagnosisSystem import ExampleDiagnosisSystem # Change this line to use your own diagnosis system
-
-# Create diagnosis system
-ds = ExampleDiagnosisSystem() # Change this line to use your own diagnosis system
-```
-Do not change anything else in run_diagnoser.py!
-
-### Timeout
-The script has a timeout of 0.1 seconds for each sample. If the diagnosis takes longer than this, the script will print a timeout message and stop processing further samples.
-
-The solutions will be evaluated on WSL2 Ubuntu 22.04, Docker version 24.0.7, Intel(R) Core(TM) i7-10750H CPU @ 2.60GHz.
-
-### Initialization in `__init__`
-Participants can use the `__init__` method to initialize their diagnosis system. This can include loading models, precomputed parameters, or any other setup required for their diagnosis system.
 
 Please note that all solutions will be evaluated inside a docker image created with the provided docker file. Please ensure that all precomputed files are compatible with this environment. It is strongly recommended that you run your final model training on the docker image created using the provided dockerfile.
 
@@ -99,17 +157,9 @@ Example how to save and load models and scalers is provided in ExampleDiagnosisS
 ## Repository Setup
 1. **Clone the Repository**:
    ```bash
-   git clone git@gitlab.com:daner29/dxc25liu-ice.git
-   cd dxc25liu-ice
+   get this repository from https://github.com/jdekleer/dxc26synth.git 
    ```
 
-2. **Files Overview**:
-   - `Dockerfile`: Defines the Docker image for the competition.
-   - `DiagnosisSystemClass.py`: The base class interface for participants.
-   - `ExampleDiagnosisSystem.py`: Example implementation of the DiagnosisSystemClass.py.
-   - `ExampleDiagnosisSystem.py`: Example implementation of the DiagnosisSystemClass.py using random forests as a fault classifier.
-   - `RunDiagnoser.py`: The script used to run participant submissions.
-   - `requirements.txt`: Contains required Python packages.
 
 ## Running the Environment
 
@@ -139,7 +189,36 @@ docker run -v "${PWD}:/app" --network none competition_env RunDiagnoser.py data/
 
 By using --network none, the container will be completely isolated from the network, ensuring it cannot connect to the internet or any external network.
 
-### Additional Information
+## Command-Line Arguments
 
-Please note that the provided training data is only for testing and explanatory purposes. The complete training data is **not provided** in this repository because of GitHub file size limits. Please use the training data provided on the competition website to train your models.
+```
+python3 RunDiagnoser.py [options]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `--ag` | Run AG benchmark with normalized m_utl metric (required for competition scoring) |
+| `--model MODEL` | Filter to a specific model (e.g., `--model 74L85`) |
+| `--scenarios PATH` | Path to benchmark scenarios directory. Defaults to `data/DXC26Synth1` |
+| `--results PATH` | Output results to a CSV file with per-model scores and final weighted average |
+
+**Examples:**
+
+```bash
+# Run full AG benchmark on all models
+python3 RunDiagnoser.py --ag
+
+# Run only the 74L85 benchmark
+python3 RunDiagnoser.py --ag --model 74L85
+
+# Use custom scenarios directory and save results to CSV
+python3 RunDiagnoser.py --ag --scenarios ~/my_scenarios --results benchmark_results.csv
+
+# Run on specific scenarios and export results
+python3 RunDiagnoser.py --ag --model c432 --results c432_results.csv
+```
+
+The `--results` CSV file contains:
+- Per-model rows: Diagnoser, Model, Gates, Avg_m_utl, Evaluated, Skipped, DA_Timeouts
+- Final score summary: Weighted average m_utl across all designs for each diagnoser
 

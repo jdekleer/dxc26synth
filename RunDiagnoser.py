@@ -574,18 +574,25 @@ def mutl(w, wstar, f):
 # Main execution
 if __name__ == "__main__":
     import argparse
+    import csv
     
     parser = argparse.ArgumentParser(description='Run diagnosis benchmarks')
     parser.add_argument('--ag', action='store_true', help='Run AG benchmark with normalized m_utl')
     parser.add_argument('--model', type=str, default=None, help='Filter to specific model (e.g., 74L85)')
-    parser.add_argument('--datadir', type=str, default=None, help='Override data directory')
+    parser.add_argument('--scenarios', type=str, default=None, help='Path to benchmark scenarios directory')
+    parser.add_argument('--results', type=str, default=None, help='Path to output results CSV file')
+    # Keep --datadir for backward compatibility
+    parser.add_argument('--datadir', type=str, default=None, help='(deprecated) Use --scenarios instead')
     args = parser.parse_args()
     
     modelsDir = os.path.expanduser("~/git/dxc25synth/data/weak")
     
+    # --scenarios takes precedence over --datadir
+    scenarios_dir = args.scenarios or args.datadir
+    
     if args.ag:
         # AG benchmark with DXC26Synth1 format
-        dataDir = args.datadir or os.path.expanduser("~/git/dxc25synth/data/DXC26Synth1")
+        dataDir = scenarios_dir or os.path.expanduser("~/git/dxc25synth/data/DXC26Synth1")
         
         all_results = {}
         for diagnoser_name, diagnoser_class in DIAGNOSERS:
@@ -596,9 +603,68 @@ if __name__ == "__main__":
             results = run_ag_benchmark(diagnoser_class, modelsDir, dataDir, model_filter=args.model)
             all_results[diagnoser_name] = results
             print_ag_results(diagnoser_name, results)
+        
+        # Write results to CSV if --results specified
+        if args.results:
+            with open(args.results, 'w', newline='') as csvfile:
+                writer = csv.writer(csvfile)
+                writer.writerow(['Diagnoser', 'Model', 'Gates', 'Avg_m_utl', 'Evaluated', 'Skipped', 'DA_Timeouts'])
+                
+                # Per-model results and compute overall averages
+                diagnoser_averages = {}
+                for diagnoser_name in all_results:
+                    model_results = all_results[diagnoser_name]
+                    total_score = 0
+                    total_evaluated = 0
+                    for model in sorted(model_results.keys()):
+                        r = model_results[model]
+                        writer.writerow([
+                            diagnoser_name,
+                            model,
+                            r['num_gates'],
+                            f"{r['avg_mutl_normalized']:.4f}",
+                            r['num_processed'],
+                            r['num_skipped'],
+                            r['num_da_timeouts']
+                        ])
+                        total_score += r['avg_mutl_normalized'] * r['num_processed']
+                        total_evaluated += r['num_processed']
+                    
+                    # Compute overall average for this diagnoser
+                    if total_evaluated > 0:
+                        diagnoser_averages[diagnoser_name] = total_score / total_evaluated
+                    else:
+                        diagnoser_averages[diagnoser_name] = 0.0
+                
+                # Write summary row for each diagnoser
+                writer.writerow([])  # blank line
+                writer.writerow(['Diagnoser', 'Final_Score'])
+                for diagnoser_name, avg in diagnoser_averages.items():
+                    writer.writerow([diagnoser_name, f"{avg:.4f}"])
+            
+            print(f"\nResults written to: {args.results}")
+        
+        # Print final scores summary
+        print("\n" + "="*50)
+        print("FINAL SCORES (weighted average across all designs)")
+        print("="*50)
+        for diagnoser_name in all_results:
+            model_results = all_results[diagnoser_name]
+            total_score = 0
+            total_evaluated = 0
+            for model in model_results:
+                r = model_results[model]
+                total_score += r['avg_mutl_normalized'] * r['num_processed']
+                total_evaluated += r['num_processed']
+            if total_evaluated > 0:
+                final_score = total_score / total_evaluated
+            else:
+                final_score = 0.0
+            print(f"{diagnoser_name:<20} {final_score:.4f}")
+        print("="*50)
     else:
         # Original benchmark
-        dataDir = args.datadir or os.path.expanduser("~/git/dxc25synth/data/dxc-09-syn-benchmark-1.1")
+        dataDir = scenarios_dir or os.path.expanduser("~/git/dxc25synth/data/dxc-09-syn-benchmark-1.1")
         
         all_results = {}
         for diagnoser_name, diagnoser_class in DIAGNOSERS:
