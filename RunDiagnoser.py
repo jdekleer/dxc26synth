@@ -496,6 +496,14 @@ def print_comparison(all_results):
 # For ambiguity groups, we average over all pairs and normalize by the best
 # achievable score (when D = T).
 
+import numpy as np
+from scipy import sparse
+import random
+
+# Threshold for switching to sampling (number of pairs)
+MUTL_SAMPLE_THRESHOLD = 1_000_000
+MUTL_NUM_SAMPLES = 10_000
+
 def mutl_single(omega, omega_star, f):
     """
     Compute m_utl for a single diagnosis pair.
@@ -519,21 +527,139 @@ def mutl_single(omega, omega_star, f):
     return 1 - term1 - term2
 
 
-def mutl_ag(D, T, f):
+def mutl_ag(D, T, f, gate_to_idx=None):
     """
     Compute average m_utl over all pairs from two ambiguity groups.
+    
+    Uses vectorized sparse matrix operations for speed.
+    Falls back to sampling for very large AGs.
     
     Args:
         D: set of frozensets - diagnosis AG from the DA
         T: set of frozensets - true AG
         f: total number of components in the system
+        gate_to_idx: optional dict mapping gate names to indices
     
     Returns:
         average m_utl score
     """
-    total = sum(mutl_single(omega, omega_star, f)
-                for omega in D for omega_star in T)
-    return total / (len(D) * len(T))
+    num_pairs = len(D) * len(T)
+    
+    # For very large AGs, use sampling
+    if num_pairs > MUTL_SAMPLE_THRESHOLD:
+        return mutl_ag_sampled(D, T, f)
+    
+    # For small AGs, use simple loop (less overhead than sparse matrices)
+    if num_pairs < 1000:
+        total = sum(mutl_single(omega, omega_star, f)
+                    for omega in D for omega_star in T)
+        return total / num_pairs
+    
+    # Medium-sized AGs: use vectorized sparse matrix approach
+    return mutl_ag_vectorized(D, T, f, gate_to_idx)
+
+
+def mutl_ag_sampled(D, T, f, num_samples=None):
+    """
+    Estimate m_utl using random sampling for very large AGs.
+    
+    Args:
+        D, T: ambiguity groups
+        f: total components
+        num_samples: number of random pairs to sample
+    
+    Returns:
+        estimated average m_utl score
+    """
+    if num_samples is None:
+        num_samples = MUTL_NUM_SAMPLES
+    
+    D_list = list(D)
+    T_list = list(T)
+    
+    total = 0.0
+    for _ in range(num_samples):
+        omega = random.choice(D_list)
+        omega_star = random.choice(T_list)
+        total += mutl_single(omega, omega_star, f)
+    
+    return total / num_samples
+
+
+def mutl_ag_vectorized(D, T, f, gate_to_idx=None):
+    """
+    Compute m_utl using vectorized sparse matrix operations.
+    
+    Args:
+        D, T: ambiguity groups (sets of frozensets)
+        f: total components
+        gate_to_idx: optional dict mapping gate names to indices
+    
+    Returns:
+        average m_utl score
+    """
+    D_list = list(D)
+    T_list = list(T)
+    m_D, m_T = len(D_list), len(T_list)
+    
+    # Build gate-to-index mapping if not provided
+    if gate_to_idx is None:
+        all_gates = set()
+        for omega in D_list:
+            all_gates.update(omega)
+        for omega in T_list:
+            all_gates.update(omega)
+        gate_to_idx = {g: i for i, g in enumerate(sorted(all_gates))}
+    
+    num_gates = len(gate_to_idx)
+    
+    # Build sparse matrices for D and T
+    D_rows, D_cols = [], []
+    for i, omega in enumerate(D_list):
+        for g in omega:
+            if g in gate_to_idx:
+                D_rows.append(i)
+                D_cols.append(gate_to_idx[g])
+    
+    T_rows, T_cols = [], []
+    for i, omega in enumerate(T_list):
+        for g in omega:
+            if g in gate_to_idx:
+                T_rows.append(i)
+                T_cols.append(gate_to_idx[g])
+    
+    M_D = sparse.csr_matrix(
+        (np.ones(len(D_rows), dtype=np.float32), (D_rows, D_cols)),
+        shape=(m_D, num_gates)
+    )
+    M_T = sparse.csr_matrix(
+        (np.ones(len(T_rows), dtype=np.float32), (T_rows, T_cols)),
+        shape=(m_T, num_gates)
+    )
+    
+    # Compute all pairwise intersections: I[i,j] = |D[i] ∩ T[j]|
+    I = (M_D @ M_T.T).toarray()
+    
+    # Diagnosis sizes
+    N = np.array([len(d) for d in D_list], dtype=np.float32).reshape(-1, 1)  # (m_D, 1)
+    N_star = np.array([len(t) for t in T_list], dtype=np.float32).reshape(1, -1)  # (1, m_T)
+    
+    # Compute n (false positives) and nbar (false negatives)
+    n = N - I          # (m_D, m_T)
+    nbar = N_star - I  # (m_D, m_T)
+    Nbar = f - N       # (m_D, 1)
+    
+    # Compute terms, handling division carefully
+    # term1 = n(N+1) / (f(n+1)) when n > 0, else 0
+    # term2 = nbar(Nbar+1) / (f(nbar+1)) when nbar > 0, else 0
+    
+    with np.errstate(divide='ignore', invalid='ignore'):
+        term1 = np.where(n > 0, n * (N + 1) / (f * (n + 1)), 0.0)
+        term2 = np.where(nbar > 0, nbar * (Nbar + 1) / (f * (nbar + 1)), 0.0)
+    
+    scores = 1.0 - term1 - term2
+    
+    return float(scores.mean())
 
 
 def mutl_normalized(D, T, f):
@@ -586,6 +712,15 @@ if __name__ == "__main__":
     args = parser.parse_args()
     
     modelsDir = os.path.expanduser("~/git/dxc25synth/data/weak")
+    
+    # Validate --model argument if specified
+    if args.model:
+        model_file = os.path.join(modelsDir, args.model + '.xml')
+        if not os.path.exists(model_file):
+            available_models = [f.replace('.xml', '') for f in os.listdir(modelsDir) if f.endswith('.xml')]
+            print(f"Error: Model '{args.model}' not found.", file=sys.stderr)
+            print(f"Available models: {', '.join(sorted(available_models))}", file=sys.stderr)
+            sys.exit(1)
     
     # --scenarios takes precedence over --datadir
     scenarios_dir = args.scenarios or args.datadir
