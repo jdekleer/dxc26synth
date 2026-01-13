@@ -501,7 +501,7 @@ from scipy import sparse
 import random
 
 # Threshold for switching to sampling (number of pairs)
-MUTL_SAMPLE_THRESHOLD = 1_000_000
+MUTL_SAMPLE_THRESHOLD = 1_000_000_000
 MUTL_NUM_SAMPLES = 10_000
 
 def mutl_single(omega, omega_star, f):
