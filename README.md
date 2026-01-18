@@ -154,10 +154,6 @@ Example how to save and load models and scalers is provided in ExampleDiagnosisS
    docker --version
    ```
 
-## Repository Setup
-1. **Clone the Repository**:
-   ```bash
-   get this repository from https://github.com/jdekleer/dxc26synth.git 
    ```
 
 
@@ -221,4 +217,36 @@ python3 RunDiagnoser.py --ag --model c432 --results c432_results.csv
 The `--results` CSV file contains:
 - Per-model rows: Diagnoser, Model, Gates, Avg_m_utl, Evaluated, Skipped, DA_Timeouts
 - Final score summary: Weighted average m_utl across all designs for each diagnoser
+
+## Submission Instructions
+
+**Email your submission to:** johan@dekleer.org and ingo.pill@gmail.com
+
+**What to submit:** A ZIP file named `TeamName_v1.zip` (e.g., `StanfordAI_v1.zip`).
+
+Use an integer version number. If you submit multiple times, increment the version (e.g., `StanfordAI_v2.zip`, `StanfordAI_v3.zip`). **We will evaluate only the latest version.**
+
+**Your submission must include:**
+1. Your diagnoser implementation (e.g., `MyDiagnoser.py`)
+2. Modified `start.py` with your diagnoser imported and added to `DIAGNOSERS`
+3. Updated `requirements.txt` if you added any Python dependencies
+4. Any trained models or precomputed data files your diagnoser needs
+
+**Do NOT modify `RunDiagnoser.py`** - only modify `start.py` to register your diagnoser.
+
+**Your submission must NOT include:**
+- The `data/` directory (we will use our own test scenarios)
+- Generated files (`*.csv`, `*.obj`, `__pycache__/`)
+- The Docker image itself
+
+**Before submitting, verify your solution works in Docker:**
+```bash
+# Build the Docker image
+docker build -t my_submission .
+
+# Test it runs correctly
+docker run -v "$(pwd):/app" --network none my_submission python3 start.py --ag --model 74L85
+```
+
+**Evaluation:** We will build your Docker image and run it against a hidden set of test scenarios. Your final score is the weighted average m_utl across all test scenarios.
 

@@ -2,3 +2,5 @@ sensors @0 { i1 = true, i2 = false, i3 = false, i4 = false, i5 = false, i6 = tru
 faultInjection @5000 isInjection = true, fault = { gate380 = faulty }, parameters = {};
 sensors @6000 { i1 = true, i2 = false, i3 = false, i4 = false, i5 = false, i6 = true, i7 = false, i8 = false, i9 = true, i10 = false, i11 = false, i12 = true, i13 = true, i14 = false, i15 = false, i16 = true, i17 = false, i18 = true, i19 = true, i20 = false, i21 = false, i22 = false, i23 = false, i24 = true, i25 = false, i26 = false, i27 = true, i28 = true, i29 = false, i30 = true, i31 = true, i32 = true, i33 = true, i34 = true, i35 = true, i36 = false, o1 = true, o2 = true, o3 = false, o4 = false, o5 = true, o6 = true, o7 = true };
 ambiguityGroup @7000 size = 4, minCardinality = 1, diagnoses = { { gate380 }, { gate415 }, { gate416 }, { gate421 } };
+
+normalizationFactor = 0.6203125000;

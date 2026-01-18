@@ -3,3 +3,5 @@ faultInjection @5000 isInjection = true, fault = { gate87 = faulty }, parameters
 faultInjection @5000 isInjection = true, fault = { gate95 = faulty }, parameters = {};
 sensors @6000 { i1 = true, i2 = true, i3 = true, i4 = false, i5 = false, i6 = false, i7 = true, i8 = false, i9 = true, o1 = true, o2 = true, o3 = true, o4 = true, o5 = true };
 ambiguityGroup @7000 size = 20, minCardinality = 2, diagnoses = { { gate101, gate104 }, { gate101, gate66 }, { gate101, gate81 }, { gate101, gate95 }, { gate101, gate96 }, { gate104, gate86 }, { gate104, gate87 }, { gate104, gate98 }, { gate66, gate86 }, { gate66, gate87 }, { gate66, gate98 }, { gate81, gate86 }, { gate81, gate87 }, { gate81, gate98 }, { gate86, gate95 }, { gate86, gate96 }, { gate87, gate95 }, { gate87, gate96 }, { gate95, gate98 }, { gate96, gate98 } };
+
+normalizationFactor = 0.3930555556;

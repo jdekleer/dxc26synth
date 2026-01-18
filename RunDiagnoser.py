@@ -76,15 +76,19 @@ def parse_ambiguity_group(line):
 
 
 def parse_scn_file_for_ag(filepath):
-    """Read a .scn file and extract the true ambiguity group.
+    """Read a .scn file and extract the true ambiguity group and precomputed normalization.
     
     Returns:
-        tuple: (sensor_readings, true_ag, num_components_hint)
+        tuple: (sensor_readings, true_ag, norm_factor, is_approx)
         sensor_readings: list of dicts with sensor values
         true_ag: set of frozensets representing the true AG, or None if timeout
+        norm_factor: precomputed mutl_ag(T,T,f) or None if not available
+        is_approx: True if norm_factor was computed via sampling
     """
     sensor_readings = []
     true_ag = None
+    norm_factor = None
+    is_approx = False
     
     with open(filepath, 'r') as f:
         for line in f:
@@ -107,8 +111,16 @@ def parse_scn_file_for_ag(filepath):
             
             elif line.startswith('ambiguityGroup'):
                 true_ag = parse_ambiguity_group(line)
+            
+            elif line.startswith('normalizationFactor'):
+                # Parse: normalizationFactor = 0.1234567890;
+                # or: normalizationFactor = 0.1234567890, approximate = true;
+                match = re.search(r'normalizationFactor\s*=\s*([0-9.]+)', line)
+                if match:
+                    norm_factor = float(match.group(1))
+                is_approx = 'approximate' in line.lower()
     
-    return sensor_readings, true_ag
+    return sensor_readings, true_ag, norm_factor, is_approx
 
 
 def run_ag_benchmark(diagnoser_class, modelsDir, dataDir, model_filter=None):
@@ -159,8 +171,8 @@ def run_ag_benchmark(diagnoser_class, modelsDir, dataDir, model_filter=None):
                     
                     dataFilePath = os.path.join(modelDataDir, dataFile)
                     
-                    # Parse the .scn file
-                    sensor_readings, true_ag = parse_scn_file_for_ag(dataFilePath)
+                    # Parse the .scn file (includes precomputed normalization factor if available)
+                    sensor_readings, true_ag, norm_factor, is_approx = parse_scn_file_for_ag(dataFilePath)
                     
                     # Skip scenarios where ground truth AG is unavailable (timed out during data generation)
                     # We can't evaluate the DA if we don't know the correct answer
@@ -196,8 +208,8 @@ def run_ag_benchmark(diagnoser_class, modelsDir, dataDir, model_filter=None):
                             # If no isolation, use empty diagnosis (will score poorly)
                             da_ag = {frozenset()}
                         
-                        # Compute normalized m_utl
-                        score = mutl_normalized(da_ag, true_ag, num_gates)
+                        # Compute normalized m_utl (use precomputed normalization if available)
+                        score = mutl_normalized(da_ag, true_ag, num_gates, precomputed_best=norm_factor)
                         mutl_scores.append(score)
                         num_processed += 1
                         print(".", end="", flush=True)
@@ -662,7 +674,7 @@ def mutl_ag_vectorized(D, T, f, gate_to_idx=None):
     return float(scores.mean())
 
 
-def mutl_normalized(D, T, f):
+def mutl_normalized(D, T, f, precomputed_best=None):
     """
     Compute normalized m_utl for ambiguity groups.
     
@@ -673,12 +685,19 @@ def mutl_normalized(D, T, f):
         D: set of frozensets - diagnosis AG from the DA
         T: set of frozensets - true AG  
         f: total number of components in the system
+        precomputed_best: optional precomputed mutl_ag(T, T, f) to avoid recomputation
     
     Returns:
         normalized m_utl score in [0, 1], where 1 = perfect match
     """
     score = mutl_ag(D, T, f)
-    best = mutl_ag(T, T, f)
+    
+    # Use precomputed normalization factor if available
+    if precomputed_best is not None:
+        best = precomputed_best
+    else:
+        best = mutl_ag(T, T, f)
+    
     return score / best
 
 
@@ -697,19 +716,24 @@ def mutl(w, wstar, f):
     """
     return mutl_single(frozenset(w), frozenset(wstar), f)
 
-# Main execution
-if __name__ == "__main__":
-    import argparse
-    import csv
+import argparse
+import csv
+
+def run_main(diagnosers, args=None):
+    """
+    Main entry point for running the benchmark.
     
-    parser = argparse.ArgumentParser(description='Run diagnosis benchmarks')
-    parser.add_argument('--ag', action='store_true', help='Run AG benchmark with normalized m_utl')
-    parser.add_argument('--model', type=str, default=None, help='Filter to specific model (e.g., 74L85)')
-    parser.add_argument('--scenarios', type=str, default=None, help='Path to benchmark scenarios directory')
-    parser.add_argument('--results', type=str, default=None, help='Path to output results CSV file')
-    # Keep --datadir for backward compatibility
-    parser.add_argument('--datadir', type=str, default=None, help='(deprecated) Use --scenarios instead')
-    args = parser.parse_args()
+    Args:
+        diagnosers: List of (name, class) tuples for diagnosers to evaluate
+        args: Optional argparse namespace. If None, parses from command line.
+    """
+    if args is None:
+        parser = argparse.ArgumentParser(description='Run diagnosis benchmarks')
+        parser.add_argument('--ag', action='store_true', help='Run AG benchmark with normalized m_utl')
+        parser.add_argument('--model', type=str, default=None, help='Filter to specific model (e.g., 74L85)')
+        parser.add_argument('--scenarios', type=str, default=None, help='Path to benchmark scenarios directory')
+        parser.add_argument('--results', type=str, default=None, help='Path to output results CSV file')
+        args = parser.parse_args()
     
     modelsDir = os.path.expanduser("~/git/dxc25synth/data/weak")
     
@@ -722,15 +746,14 @@ if __name__ == "__main__":
             print(f"Available models: {', '.join(sorted(available_models))}", file=sys.stderr)
             sys.exit(1)
     
-    # --scenarios takes precedence over --datadir
-    scenarios_dir = args.scenarios or args.datadir
+    scenarios_dir = args.scenarios
     
     if args.ag:
         # AG benchmark with DXC26Synth1 format
         dataDir = scenarios_dir or os.path.expanduser("~/git/dxc25synth/data/DXC26Synth1")
         
         all_results = {}
-        for diagnoser_name, diagnoser_class in DIAGNOSERS:
+        for diagnoser_name, diagnoser_class in diagnosers:
             print(f"\n{'#'*80}")
             print(f"# Running AG Benchmark: {diagnoser_name}")
             print(f"{'#'*80}")
@@ -802,7 +825,7 @@ if __name__ == "__main__":
         dataDir = scenarios_dir or os.path.expanduser("~/git/dxc25synth/data/dxc-09-syn-benchmark-1.1")
         
         all_results = {}
-        for diagnoser_name, diagnoser_class in DIAGNOSERS:
+        for diagnoser_name, diagnoser_class in diagnosers:
             print(f"\n{'#'*80}")
             print(f"# Running: {diagnoser_name}")
             print(f"{'#'*80}")
@@ -813,3 +836,8 @@ if __name__ == "__main__":
         
         # Print comparison if multiple diagnosers
         print_comparison(all_results)
+
+
+# Main execution - runs built-in diagnosers when called directly
+if __name__ == "__main__":
+    run_main(DIAGNOSERS)
