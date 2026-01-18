@@ -16,8 +16,8 @@ DIAGNOSERS = [
 ]
 
 # Timeout for processing each .scn file (in seconds)
-SOFT_TIMEOUT = 1   # Internal timeout (method should check this)
-HARD_TIMEOUT = 2   # External timeout (signal alarm - kills if method doesn't obey)
+SOFT_TIMEOUT = 1     # Internal timeout (method should check this)
+HARD_TIMEOUT = 1.1   # External timeout (signal alarm - kills if method doesn't obey)
 
 class TimeoutError(Exception):
     pass
@@ -182,7 +182,7 @@ def run_ag_benchmark(diagnoser_class, modelsDir, dataDir, model_filter=None):
                         continue
                     
                     try:
-                        signal.alarm(HARD_TIMEOUT)
+                        signal.setitimer(signal.ITIMER_REAL, HARD_TIMEOUT)
                         scn_start_time = time.time()
                         
                         # Feed all sensor readings to the DA
@@ -192,7 +192,7 @@ def run_ag_benchmark(diagnoser_class, modelsDir, dataDir, model_filter=None):
                             if detection and isolation:
                                 da_isolation = isolation
                         
-                        signal.alarm(0)
+                        signal.setitimer(signal.ITIMER_REAL, 0)
                         
                         # Convert DA's isolation to an AG (set of frozensets)
                         # Check if DA already returned AG format (set of frozensets) or old format (set of strings)
@@ -215,7 +215,7 @@ def run_ag_benchmark(diagnoser_class, modelsDir, dataDir, model_filter=None):
                         print(".", end="", flush=True)
                         
                     except TimeoutError:
-                        signal.alarm(0)
+                        signal.setitimer(signal.ITIMER_REAL, 0)
                         # Penalize DA timeouts with score = 0
                         mutl_scores.append(0.0)
                         num_processed += 1
@@ -291,7 +291,7 @@ def run_benchmark(diagnoser_class, modelsDir, dataDir):
                     last_isolation = set()
                     
                     try:
-                        signal.alarm(HARD_TIMEOUT)
+                        signal.setitimer(signal.ITIMER_REAL, HARD_TIMEOUT)
                         scn_start_time = time.time()
                         
                         with open(dataFilePath, 'r') as f:
@@ -334,10 +334,10 @@ def run_benchmark(diagnoser_class, modelsDir, dataDir):
                                                 time_to_detection = samples_after_fault
                                             samples_after_fault += 1
                         
-                        signal.alarm(0)
+                        signal.setitimer(signal.ITIMER_REAL, 0)
                         
                     except TimeoutError:
-                        signal.alarm(0)
+                        signal.setitimer(signal.ITIMER_REAL, 0)
                         timed_out = True
                     
                     if timed_out:
@@ -735,7 +735,9 @@ def run_main(diagnosers, args=None):
         parser.add_argument('--results', type=str, default=None, help='Path to output results CSV file')
         args = parser.parse_args()
     
-    modelsDir = os.path.expanduser("~/git/dxc25synth/data/weak")
+    # Use paths relative to this script's directory
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    modelsDir = os.path.join(script_dir, "data", "weak")
     
     # Validate --model argument if specified
     if args.model:
@@ -750,7 +752,7 @@ def run_main(diagnosers, args=None):
     
     if args.ag:
         # AG benchmark with DXC26Synth1 format
-        dataDir = scenarios_dir or os.path.expanduser("~/git/dxc25synth/data/DXC26Synth1")
+        dataDir = scenarios_dir or os.path.join(script_dir, "data", "DXC26Synth1")
         
         all_results = {}
         for diagnoser_name, diagnoser_class in diagnosers:
@@ -822,7 +824,7 @@ def run_main(diagnosers, args=None):
         print("="*50)
     else:
         # Original benchmark
-        dataDir = scenarios_dir or os.path.expanduser("~/git/dxc25synth/data/dxc-09-syn-benchmark-1.1")
+        dataDir = scenarios_dir or os.path.join(script_dir, "data", "dxc-09-syn-benchmark-1.1")
         
         all_results = {}
         for diagnoser_name, diagnoser_class in diagnosers:
