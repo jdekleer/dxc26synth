@@ -7,6 +7,7 @@ This is a preliminary guide to running the Synthetic track competition environme
 You can get this repository from https://github.com/jdekleer/dxc26synth.git
 
 The simplest way to run the diagnoser is to go to the directory you installed dxc26synth.git and do `python3 RunDiagnoser.py`.
+Please note that we require numpy and scipy packages to be installed. You can install them with the commands `python3 -m pip install numpy ` or/and `python3 -m pip install scipy` respectively. 
 
 For example, `python3 RunDiagnoser.py --ag --model 74L85` will run the diagnostic algorithm on all scenarios in the 74L85 data set. The `--ag` flag indicates the metric that will be used for the competition.
 
